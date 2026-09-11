@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 
-NDVI_REPO_ROOT = Path("/rvt_mount/SITS_NDVI90pct")
+NDVI_REPO_ROOT = Path("/drive_mount/SITS_NDVI90pct")
 DEFAULT_COMPRESSION = "DEFLATE"
 DEFAULT_ZLEVEL = "9"
 DEFAULT_BIGTIFF = "YES"
@@ -117,4 +117,28 @@ def execute_cmd(*args, **kwargs):
 
 
 def export_ndvi_p90_product(*args, **kwargs):
-    return _utils().export_ndvi_p90_product(*args, **kwargs)
+    module = _utils()
+    original_build_overviews = module.build_overviews_inplace
+
+    def build_overviews_for_raster(raster_path, levels=None, resampling=None):
+        import rasterio
+
+        requested_levels = levels or module.DEFAULT_OVERVIEW_LEVELS
+        with rasterio.open(raster_path) as src:
+            smallest_dimension = min(src.width, src.height)
+        safe_levels = [
+            level for level in requested_levels if level < smallest_dimension
+        ]
+        if not safe_levels:
+            return None
+
+        call_kwargs = {"levels": safe_levels}
+        if resampling is not None:
+            call_kwargs["resampling"] = resampling
+        return original_build_overviews(raster_path, **call_kwargs)
+
+    module.build_overviews_inplace = build_overviews_for_raster
+    try:
+        return module.export_ndvi_p90_product(*args, **kwargs)
+    finally:
+        module.build_overviews_inplace = original_build_overviews

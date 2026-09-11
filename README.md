@@ -10,12 +10,12 @@ This project produces 12 final rasters:
 - Sentinel-2, April-October, `DSWI_median`
 - Sentinel-2, April-October, `DSWI_p20`
 - Sentinel-2, April-October, `DSWI_p80`
-- Landsat 5/8/9, April-May, `DSWI_median`
-- Landsat 5/8/9, April-May, `DSWI_p20`
-- Landsat 5/8/9, April-May, `DSWI_p80`
-- Landsat 5/8/9, April-October, `DSWI_median`
-- Landsat 5/8/9, April-October, `DSWI_p20`
-- Landsat 5/8/9, April-October, `DSWI_p80`
+- Landsat 5/7/8/9, April-May, `DSWI_median`
+- Landsat 5/7/8/9, April-May, `DSWI_p20`
+- Landsat 5/7/8/9, April-May, `DSWI_p80`
+- Landsat 5/7/8/9, April-October, `DSWI_median`
+- Landsat 5/7/8/9, April-October, `DSWI_p20`
+- Landsat 5/7/8/9, April-October, `DSWI_p80`
 
 Processing model:
 
@@ -41,6 +41,7 @@ Edit the block at the top of [force_workflow.py](/rvt_mount/SITS_dswi_yearly_sta
 - `default_aoi_glob`
 - `sentinel2_years`
 - `landsat_years`
+- `spectral_adjust` (defaults to `True`)
 
 Default periods:
 
@@ -50,9 +51,11 @@ Default periods:
 Default sensors:
 
 - Sentinel-2: `SEN2A`, `SEN2B`, target `SEN2L`, 10 m
-- Landsat: `LND05`, `LND08`, `LND09`, target `LNDLG`, 30 m
+- Landsat: `LND05`, `LND07`, `LND08`, `LND09`, target `SEN2L`, 30 m
 
-The Landsat default intentionally excludes `LND07`, because you explicitly asked for Landsat 5, 8, and 9 together.
+Landsat 7 is included from 1999 through 2019. The DSWI UDFs use FORCE's
+harmonized band names, so the same median, p20, and p80 calculations apply to
+`LND07` observations.
 
 Default year coverage in the current config is:
 
@@ -78,6 +81,10 @@ Available modes:
 - `postprocess`: export yearly rasters from existing FORCE tile outputs
 - `stack`: stack existing yearly rasters into final multi-band products
 - `all`: run prepare, run, postprocess, and stack in sequence
+
+Stacks contain one band per requested year. Years without a usable annual raster
+are represented by nodata-only bands by default; use `--no-pad-missing-years`
+to require every annual raster to exist.
 
 Typical usage:
 

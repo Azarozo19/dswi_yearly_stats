@@ -1,6 +1,6 @@
 """prepare, run, postprocess, stack, and all.
 python force_workflow.py prepare \
-  --aoi /rvt_mount/3DTests/data/DSWI_elina/UG_3035/UG_1polygon_3035.shp \
+  --aoi /drive_mount/3DTests/data/DSWI_elina/UG_3035/UG_1polygon_3035.shp \
   --sensor sentinel2 \
   --stat median \
   --window apr_oct \
@@ -26,13 +26,13 @@ from utils.external_ndvi import (
 from utils.stacking import stack_annual_rasters
 
 
-base_path = "/rvt_mount"
-project_prefix = "dswi_yearly_stats"
+base_path = "/drive_mount"
+project_prefix = "elina_dswi"
 force_dir = "/force:/force"
-local_dir = "/rvt_mount:/rvt_mount"
+local_dir = "/drive_mount:/drive_mount"
 hold = False
 
-default_aoi_glob = "/rvt_mount/3DTests/data/DSWI_elina/UG_3035/UG_1polygon_3035.shp"
+default_aoi_glob = "/drive_mount/process/data/elina_dswi/UG_1polygon_3035.shp"
 
 # Defaults stop at 2025 because today is 2026-08-21 and the 2026 April-October window is not complete yet.
 sentinel2_apr_may_years = list(range(2016, 2026))
@@ -42,6 +42,7 @@ landsat_years = list(range(1984, 2026))
 chunk_size = "3000 3000"
 version = "v1_0"
 python_type = "CHUNK"
+spectral_adjust = True
 
 create_parameter_files = True
 run_force_jobs = True
@@ -151,8 +152,8 @@ PRODUCT_SPECS = [
     {
         "sensor_key": "landsat",
         "sensor_profile": "landsat",
-        "force_sensors": ["LND05", "LND08", "LND09"],
-        "target_sensor": "LNDLG",
+        "force_sensors": ["LND05", "LND07", "LND08", "LND09"],
+        "target_sensor": "SEN2L",
         "resolution": 30,
         "years": landsat_years,
         "window_key": "apr_may",
@@ -165,8 +166,8 @@ PRODUCT_SPECS = [
     {
         "sensor_key": "landsat",
         "sensor_profile": "landsat",
-        "force_sensors": ["LND05", "LND08", "LND09"],
-        "target_sensor": "LNDLG",
+        "force_sensors": ["LND05", "LND07", "LND08", "LND09"],
+        "target_sensor": "SEN2L",
         "resolution": 30,
         "years": landsat_years,
         "window_key": "apr_may",
@@ -179,8 +180,8 @@ PRODUCT_SPECS = [
     {
         "sensor_key": "landsat",
         "sensor_profile": "landsat",
-        "force_sensors": ["LND05", "LND08", "LND09"],
-        "target_sensor": "LNDLG",
+        "force_sensors": ["LND05", "LND07", "LND08", "LND09"],
+        "target_sensor": "SEN2L",
         "resolution": 30,
         "years": landsat_years,
         "window_key": "apr_may",
@@ -193,8 +194,8 @@ PRODUCT_SPECS = [
     {
         "sensor_key": "landsat",
         "sensor_profile": "landsat",
-        "force_sensors": ["LND05", "LND08", "LND09"],
-        "target_sensor": "LNDLG",
+        "force_sensors": ["LND05", "LND07", "LND08", "LND09"],
+        "target_sensor": "SEN2L",
         "resolution": 30,
         "years": landsat_years,
         "window_key": "apr_oct",
@@ -207,8 +208,8 @@ PRODUCT_SPECS = [
     {
         "sensor_key": "landsat",
         "sensor_profile": "landsat",
-        "force_sensors": ["LND05", "LND08", "LND09"],
-        "target_sensor": "LNDLG",
+        "force_sensors": ["LND05", "LND07", "LND08", "LND09"],
+        "target_sensor": "SEN2L",
         "resolution": 30,
         "years": landsat_years,
         "window_key": "apr_oct",
@@ -221,8 +222,8 @@ PRODUCT_SPECS = [
     {
         "sensor_key": "landsat",
         "sensor_profile": "landsat",
-        "force_sensors": ["LND05", "LND08", "LND09"],
-        "target_sensor": "LNDLG",
+        "force_sensors": ["LND05", "LND07", "LND08", "LND09"],
+        "target_sensor": "SEN2L",
         "resolution": 30,
         "years": landsat_years,
         "window_key": "apr_oct",
@@ -272,13 +273,18 @@ def resolve_force_sensors_for_year(spec, year):
     if spec["sensor_key"] != "landsat":
         return spec["force_sensors"]
 
-    if year <= 2012:
-        return ["LND05"]
-    if year == 2013:
-        return ["LND05", "LND08"]
-    if year <= 2022:
-        return ["LND08"]
-    return ["LND09"]
+    if year <= 1998:
+        sensors = ["LND05"]
+    elif year <= 2012:
+        sensors = ["LND05", "LND07"]
+    elif year <= 2019:
+        sensors = ["LND07", "LND08"]
+    elif year == 2020:
+        sensors = ["LND08"]
+    else:
+        sensors = ["LND08", "LND09"]
+
+    return [sensor for sensor in sensors if sensor in spec["force_sensors"]]
 
 
 def tiles_root_for(spec, year, aoi_path):
@@ -325,15 +331,6 @@ def run_year(spec, year, aoi_path):
             hold=hold,
             udf_source=str(udf_source_path),
             python_type=python_type,
-            sensor_profile=spec["sensor_profile"],
-            sensors=force_sensors,
-            target_sensor=spec["target_sensor"],
-            resolution=spec["resolution"],
-            spectral_adjust=False,
-            date_ignore_landsat_7="2019-12-31",
-            above_noise=3,
-            below_noise=0 if spec["sensor_key"] == "landsat" else 1,
-            screen_qai="NODATA CLOUD_OPAQUE CLOUD_BUFFER CLOUD_CIRRUS CLOUD_SHADOW SNOW SUBZERO SATURATION",
         )
 
     params_path = (
@@ -348,7 +345,21 @@ def run_year(spec, year, aoi_path):
     if not params_path.exists():
         raise FileNotFoundError(f"Missing FORCE parameter file: {params_path}")
 
-    configure_param_file(params_path, start_date, end_date, chunk_size, spec["doy_range"])
+    configure_param_file(
+        params_path,
+        start_date,
+        end_date,
+        chunk_size,
+        spec["doy_range"],
+        sensors=force_sensors,
+        target_sensor=spec["target_sensor"],
+        resolution=spec["resolution"],
+        spectral_adjust=spectral_adjust,
+        date_ignore_landsat_7="2019-12-31",
+        above_noise=3,
+        below_noise=0 if spec["sensor_key"] == "landsat" else 1,
+        screen_qai="NODATA CLOUD_OPAQUE CLOUD_BUFFER CLOUD_CIRRUS CLOUD_SHADOW SNOW SUBZERO SATURATION",
+    )
 
     output_path = annual_output_path(spec, year, aoi_path)
     if run_force_jobs:
@@ -374,25 +385,34 @@ def run_year(spec, year, aoi_path):
             return output_path, time_label, False
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        export_ndvi_p90_product(
-            base_path=base_path,
-            project_name=project_name,
-            basename=Path(aoi_path).name,
-            aoi_path=aoi_path,
-            output_dir=output_path.parent / f"tiles_{year}",
-            vrt_output_path=output_path.with_suffix(".vrt"),
-            final_output_path=output_path,
-            report_path=output_path.with_name(output_path.stem + "_report.json"),
-            dtype="int16",
-            num_threads=postprocess_num_threads,
-            cachemax_mb=postprocess_cachemax_mb,
-            build_overviews=postprocess_build_overviews,
-            compression_method=postprocess_compression_method,
-            bigtiff=postprocess_bigtiff,
-            zlevel=postprocess_zlevel,
-            blocksize=postprocess_blocksize,
-            output_nodata=postprocess_output_nodata,
-        )
+        try:
+            export_ndvi_p90_product(
+                base_path=base_path,
+                project_name=project_name,
+                basename=Path(aoi_path).name,
+                aoi_path=aoi_path,
+                output_dir=output_path.parent / f"tiles_{year}",
+                vrt_output_path=output_path.with_suffix(".vrt"),
+                final_output_path=output_path,
+                report_path=output_path.with_name(output_path.stem + "_report.json"),
+                dtype="int16",
+                num_threads=postprocess_num_threads,
+                cachemax_mb=postprocess_cachemax_mb,
+                build_overviews=postprocess_build_overviews,
+                compression_method=postprocess_compression_method,
+                bigtiff=postprocess_bigtiff,
+                zlevel=postprocess_zlevel,
+                blocksize=postprocess_blocksize,
+                output_nodata=postprocess_output_nodata,
+            )
+        except RuntimeError as error:
+            if "No clipped tiles were produced" not in str(error):
+                raise
+            print(
+                f"Skipping {product_key(spec)} {year} and {Path(aoi_path).name}: "
+                "FORCE output is entirely nodata inside the AOI."
+            )
+            return output_path, time_label, False
         produced_output = output_path.exists()
 
     return output_path, time_label, produced_output
@@ -408,11 +428,43 @@ def set_param_value(params_path, key, value):
     raise ValueError(f"Parameter {key} not found in {params_path}")
 
 
-def configure_param_file(params_path, start_date, end_date, chunk_size_value, doy_range_value, file_tile=None):
+def configure_param_file(
+    params_path,
+    start_date,
+    end_date,
+    chunk_size_value,
+    doy_range_value,
+    file_tile=None,
+    *,
+    sensors=None,
+    target_sensor=None,
+    resolution=None,
+    spectral_adjust=None,
+    date_ignore_landsat_7=None,
+    above_noise=None,
+    below_noise=None,
+    screen_qai=None,
+):
     set_param_value(params_path, "DATE_RANGE", f"{start_date} {end_date}")
     set_param_value(params_path, "DOY_RANGE", doy_range_value)
     set_param_value(params_path, "CHUNK_SIZE", chunk_size_value)
     set_param_value(params_path, "FILE_TILE", file_tile or "NULL")
+
+    optional_values = {
+        "SENSORS": " ".join(sensors) if sensors is not None else None,
+        "TARGET_SENSOR": target_sensor,
+        "RESOLUTION": resolution,
+        "SPECTRAL_ADJUST": (
+            str(spectral_adjust).upper() if spectral_adjust is not None else None
+        ),
+        "DATE_IGNORE_LANDSAT_7": date_ignore_landsat_7,
+        "ABOVE_NOISE": above_noise,
+        "BELOW_NOISE": below_noise,
+        "SCREEN_QAI": screen_qai,
+    }
+    for key, value in optional_values.items():
+        if value is not None:
+            set_param_value(params_path, key, value)
 
 
 def build_stack_for_product(spec, aoi_path):
@@ -527,8 +579,13 @@ def build_parser():
     )
     parser.add_argument(
         "--pad-missing-years",
-        action="store_true",
-        help="During stack, write nodata-only bands for requested years that have no annual raster.",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "During stack, write nodata-only bands for requested years that have no "
+            "annual raster (default: enabled). Use --no-pad-missing-years for strict "
+            "stacking that skips products with missing years."
+        ),
     )
     return parser
 
